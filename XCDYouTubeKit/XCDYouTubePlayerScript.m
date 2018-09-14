@@ -8,12 +8,18 @@
 
 #import "XCDYouTubeLogger+Private.h"
 
+static NSArray<NSString*> *XCDYouTubePlayerScriptAdditionalSignatureRegxes = NULL;
+
 @interface XCDYouTubePlayerScript ()
 @property (nonatomic, strong) JSContext *context;
 @property (nonatomic, strong) JSValue *signatureFunction;
 @end
 
 @implementation XCDYouTubePlayerScript
+
++ (void)setAdditionalSignatureRegxes:(NSArray<NSString*>*)regexes {
+    XCDYouTubePlayerScriptAdditionalSignatureRegxes = regexes;
+}
 
 - (instancetype) initWithString:(NSString *)string
 {
@@ -68,13 +74,30 @@
 		XCDYouTubeLogWarning(@"Unexpected player script (no anonymous function found)");
 	}
 
-    NSRegularExpression *signatureRegularExpression = [NSRegularExpression regularExpressionWithPattern:@"[\"']signature[\"']\\s*,\\s*([^\\(]+)" options:NSRegularExpressionCaseInsensitive error:NULL];
-    NSArray<NSTextCheckingResult *> *signatureResults =  [signatureRegularExpression matchesInString:script options:(NSMatchingOptions)0 range:NSMakeRange(0, script.length)];
-    if (!signatureResults.count)
-    {
-        signatureRegularExpression = [NSRegularExpression regularExpressionWithPattern:@"(\\w+)\\s*=\\s*function\\((\\w+)\\).\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;" options:NSRegularExpressionCaseInsensitive error:NULL];
-        signatureResults =  [signatureRegularExpression matchesInString:script options:(NSMatchingOptions)0 range:NSMakeRange(0, script.length)];
+    NSArray<NSString*> *regxes = @[
+                                   @"(\\w+)\\s*=\\s*function\\((\\w+)\\).\\s*\\2=\\s*\\2\\.split\\(\"\"\\)\\s*;",
+                                   @"[\"']signature[\"']\\s*,\\s*([^\\(]+)"
+                        ];
+    
+    if (XCDYouTubePlayerScriptAdditionalSignatureRegxes.count > 0) {
+        regxes = [XCDYouTubePlayerScriptAdditionalSignatureRegxes arrayByAddingObjectsFromArray:regxes];
     }
+    
+    NSArray<NSTextCheckingResult *> *signatureResults = @[];
+    
+    for (NSString *regex in regxes) {
+        @try {
+            NSRegularExpression *signatureRegularExpression = [NSRegularExpression regularExpressionWithPattern:regex options:NSRegularExpressionCaseInsensitive error:NULL];
+            NSArray<NSTextCheckingResult *> *results = [signatureRegularExpression matchesInString:script options:(NSMatchingOptions)0 range:NSMakeRange(0, script.length)];
+            if (results.count > 0) {
+                signatureResults = [signatureResults arrayByAddingObjectsFromArray:results];
+            }
+        }
+        @catch (NSException *e) {
+            //
+        }
+    }
+    
     for (NSTextCheckingResult *signatureResult in signatureResults)
     {
         NSString *signatureFunctionName = signatureResult.numberOfRanges > 1 ? [script substringWithRange:[signatureResult rangeAtIndex:1]] : nil;

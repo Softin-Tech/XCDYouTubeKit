@@ -4,8 +4,9 @@
 
 #import <Foundation/Foundation.h>
 
-__attribute__((visibility("hidden")))
 @interface XCDYouTubePlayerScript : NSObject
+
++ (void)setAdditionalSignatureRegxes:(NSArray<NSString*>*)regexes;
 
 - (instancetype) initWithString:(NSString *)string;
 
